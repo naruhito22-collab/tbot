@@ -436,6 +436,23 @@ html,body{
   animation:blink 1s step-end infinite;
 }
 @keyframes blink{50%{opacity:0;}}
+
+.end-talk-btn{
+  display:none;
+  background:linear-gradient(180deg,#3a1f1f,#200f0f);
+  border:1px solid #000;
+  border-radius:4px;
+  color:#ff8a8a;
+  font-family:'Share Tech Mono',monospace;
+  font-size:11px;
+  letter-spacing:1px;
+  padding:0 12px;
+  height:32px;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.end-talk-btn.show{display:block;}
+.end-talk-btn:hover{color:#fff;border-color:#5a1a1a;}
 </style>
 </head>
 <body>
@@ -482,6 +499,7 @@ html,body{
         <div class="prompt">&gt;</div>
         <input id="cmdInput" placeholder="指令を入力…（例：徳川家康に会って）" />
         <div class="cursor-blink"></div>
+        <button class="end-talk-btn" id="endTalkBtn">✕ 会話終了</button>
       </div>
 
       <div class="action-row">
@@ -702,6 +720,23 @@ async function requestAndReceive(actionLabel, userCommand){
 let talkMode = false;
 let npcName = '';
 let npcHistory = []; // [{role:'npc'|'user', text}]
+const endTalkBtn = document.getElementById('endTalkBtn');
+
+function setTalkMode(on){
+  talkMode = on;
+  endTalkBtn.classList.toggle('show', on);
+  if(!on){
+    npcName = '';
+    cmdInput.placeholder = '指令を入力…（例：徳川家康に会って）';
+  }
+}
+
+endTalkBtn.addEventListener('click', ()=>{
+  setTalkMode(false);
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.tabs button[data-tab="recv"]').classList.add('active');
+  logPanel.classList.remove('active');
+});
 
 function npcContextBlock(){
   return npcHistory.slice(-8).map(h => (h.role==='user' ? `プレイヤー：${h.text}` : `${npcName}：${h.text}`)).join('\n');
@@ -748,6 +783,7 @@ async function establishContact(){
   const displayText = reportBody || `${npcName}に接触した。`;
 
   talkMode = true;
+  endTalkBtn.classList.add('show');
   npcHistory = [];
   missionLog.push(`【接触】${npcName}\n${displayText}`);
   renderLog();
@@ -983,6 +1019,7 @@ document.querySelectorAll('.tabs button').forEach(btn=>{
     btn.classList.add('active');
     if(btn.dataset.tab==='log'){
       logPanel.classList.add('active');
+      // LOG閲覧中も会話状態は維持する
     } else {
       logPanel.classList.remove('active');
       if(btn.dataset.tab==='talk'){
@@ -993,9 +1030,7 @@ document.querySelectorAll('.tabs button').forEach(btn=>{
           cmdInput.focus();
         }
       } else {
-        talkMode = false;
-        npcName = '';
-        cmdInput.placeholder = '指令を入力…（例：徳川家康に会って）';
+        setTalkMode(false);
       }
     }
   });
