@@ -292,6 +292,71 @@ html,body{
   color:#55555c;
 }
 
+.coord-input{
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  background:#050505;
+  border-radius:6px;
+  padding:10px;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,0.8);
+}
+.coord-input .field{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.coord-input label{
+  font-family:'Share Tech Mono',monospace;
+  font-size:9px;
+  color:var(--metal-text);
+  letter-spacing:1px;
+  width:34px;
+  flex-shrink:0;
+}
+.coord-input input{
+  flex:1;
+  min-width:0;
+  background:transparent;
+  border:none;
+  border-bottom:1px solid #2a2a2e;
+  outline:none;
+  font-family:'Share Tech Mono',monospace;
+  color:var(--phosphor);
+  font-size:12px;
+  padding:3px 2px;
+}
+.coord-input input::placeholder{color:var(--phosphor-dim);}
+.coord-set{
+  margin-top:2px;
+  background:linear-gradient(180deg,#28282d,#161619);
+  border:1px solid #000;
+  border-radius:4px;
+  color:var(--metal-text);
+  font-family:'Share Tech Mono',monospace;
+  font-size:10px;
+  letter-spacing:2px;
+  padding:6px 0;
+  cursor:pointer;
+}
+.coord-set:hover{color:var(--phosphor);}
+.coord-set:disabled{opacity:.4;cursor:default;}
+.coord-error{
+  font-family:'Share Tech Mono',monospace;
+  font-size:10px;
+  color:var(--danger);
+  letter-spacing:.5px;
+  min-height:12px;
+}
+.coord-note{
+  font-family:'Share Tech Mono',monospace;
+  font-size:8px;
+  color:#4a4a50;
+  letter-spacing:.5px;
+  line-height:1.5;
+}
+
 .knob-row{display:flex;gap:14px;margin-top:2px;}
 .knob{
   width:34px;height:34px;border-radius:50%;
@@ -440,6 +505,20 @@ html,body{
         <div class="knob" title="SENS"></div>
         <div class="knob" title="GAIN"></div>
       </div>
+
+      <div class="coord-input">
+        <div class="field">
+          <label>西暦</label>
+          <input id="yearInput" type="text" inputmode="numeric" placeholder="1856" maxlength="4">
+        </div>
+        <div class="field">
+          <label>場所</label>
+          <input id="placeInput" type="text" placeholder="京都">
+        </div>
+        <button class="coord-set" id="coordSetBtn">SET COORDINATE</button>
+        <div class="coord-error" id="coordError"></div>
+        <div class="coord-note">※国内は和暦変換、海外は西暦表示。地名は実在確認あり。</div>
+      </div>
     </div>
   </div>
 </div>
@@ -556,6 +635,130 @@ cmdInput.addEventListener('keydown', e=>{
     cmdInput.value='';
     receive(`指令受領：「${cmd}」\n\n実行中……現地からの報告を待て。`);
   }
+});
+
+// ---- Japanese era (nengo) conversion table ----
+// Simplified table for prototype use. Pre-Meiji boundaries are approximate.
+const NENGO_TABLE = [
+  [1868,"明治"],[1912,"大正"],[1926,"昭和"],[1989,"平成"],[2019,"令和"],
+  [1848,"嘉永"],[1854,"安政"],[1860,"万延"],[1861,"文久"],[1864,"元治"],[1865,"慶応"],
+  [1830,"天保"],[1844,"弘化"],
+  [1818,"文政"],[1801,"享和"],[1804,"文化"],
+  [1789,"寛政"],[1781,"天明"],[1772,"安永"],[1764,"明和"],
+  [1751,"宝暦"],[1748,"寛延"],[1744,"延享"],[1741,"寛保"],[1736,"元文"],
+  [1716,"享保"],[1711,"正徳"],[1704,"宝永"],
+  [1688,"元禄"],[1684,"貞享"],[1681,"天和"],[1673,"延宝"],
+  [1661,"寛文"],[1658,"万治"],[1655,"明暦"],[1652,"承応"],[1648,"慶安"],
+  [1644,"正保"],[1624,"寛永"],[1615,"元和"],[1603,"慶長"],
+  [1596,"慶長"],[1592,"文禄"],[1573,"天正"],[1570,"元亀"]
+].sort((a,b)=>a[0]-b[0]);
+
+function kanjiNum(n){
+  if(n<=0) return "元";
+  const digits = ["","一","二","三","四","五","六","七","八","九"];
+  const units = ["","十","百"];
+  if(n<10) return digits[n];
+  let s = "";
+  const hundreds = Math.floor(n/100), tens = Math.floor((n%100)/10), ones = n%10;
+  if(hundreds) s += (hundreds>1?digits[hundreds]:"") + units[2];
+  if(tens) s += (tens>1?digits[tens]:"") + units[1];
+  if(ones) s += digits[ones];
+  return s;
+}
+
+function seirekiToWareki(year){
+  let match = null;
+  for(const [start,name] of NENGO_TABLE){
+    if(year>=start) match = [start,name]; else break;
+  }
+  if(!match) return null;
+  const [start,name] = match;
+  const y = year - start + 1;
+  return `${name}${y===1?"元":kanjiNum(y)}年`;
+}
+
+// ---- geocoding (Nominatim) ----
+async function geocodePlace(place){
+  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(place)}`;
+  const res = await fetch(url, { headers: { 'Accept-Language': 'ja' } });
+  if(!res.ok) throw new Error('geocode failed');
+  const data = await res.json();
+  if(!data.length) return null;
+  const item = data[0];
+  const country = item.address?.country || "";
+  const isJapan = country === "日本" || country === "Japan";
+  return { displayName: item.display_name, isJapan };
+}
+
+// ---- dial seeking animation ----
+function spinDialTo(targetDeg, duration){
+  dial.classList.add('seeking');
+  const startAngle = angle;
+  const delta = targetDeg - startAngle;
+  const startTime = performance.now();
+  function step(now){
+    const p = Math.min(1, (now-startTime)/duration);
+    const eased = 1 - Math.pow(1-p, 3);
+    angle = startAngle + delta*eased;
+    dialInner.style.transform = `rotate(${angle}deg)`;
+    if(p<1) requestAnimationFrame(step);
+    else dial.classList.remove('seeking');
+  }
+  requestAnimationFrame(step);
+}
+
+// ---- coordinate set handler ----
+const yearInput = document.getElementById('yearInput');
+const placeInput = document.getElementById('placeInput');
+const coordSetBtn = document.getElementById('coordSetBtn');
+const coordError = document.getElementById('coordError');
+
+coordSetBtn.addEventListener('click', async ()=>{
+  coordError.textContent = '';
+  const yearStr = yearInput.value.trim();
+  const placeStr = placeInput.value.trim();
+
+  if(!/^\d{3,4}$/.test(yearStr)){
+    coordError.textContent = '西暦を数字で入力して';
+    return;
+  }
+  if(!placeStr){
+    coordError.textContent = '場所を入力して';
+    return;
+  }
+
+  coordSetBtn.disabled = true;
+  coordSetBtn.textContent = 'SEEKING…';
+  spinDialTo(angle + 260 + Math.random()*260, 1400);
+
+  let geo;
+  try{
+    geo = await geocodePlace(placeStr);
+  }catch(e){
+    geo = null;
+  }
+
+  coordSetBtn.disabled = false;
+  coordSetBtn.textContent = 'SET COORDINATE';
+
+  if(!geo){
+    coordError.textContent = '該当場所無し。再入力して';
+    return;
+  }
+
+  const year = parseInt(yearStr,10);
+  const nowYear = new Date().getFullYear();
+  let eraText;
+  if(geo.isJapan && year <= nowYear){
+    const wareki = seirekiToWareki(year);
+    eraText = wareki ? wareki : `西暦${year}年`;
+  } else {
+    eraText = `西暦${year}年`;
+  }
+
+  document.getElementById('eraLabel').textContent = eraText;
+  document.getElementById('placeLabel').textContent = placeStr;
+  document.getElementById('fromLine').textContent = `FROM: TPU-01 / ${eraText}・${placeStr}`;
 });
 
 // ---- tabs ----
