@@ -521,7 +521,6 @@ html,body{
       <div class="dial-outer" id="dial">
         <div class="dial-inner" id="dialInner"></div>
       </div>
-      <div class="dial-label">COORDINATE</div>
 
       <div class="coord-input">
         <div class="field">
@@ -532,7 +531,7 @@ html,body{
           <label>場所</label>
           <input id="placeInput" type="text" placeholder="京都">
         </div>
-        <button class="coord-set" id="coordSetBtn">SET COORDINATE</button>
+        <button class="coord-set" id="coordSetBtn">SET</button>
         <div class="coord-error" id="coordError"></div>
         <div class="coord-note">※国内は和暦変換、海外は西暦表示。地名は実在確認あり。</div>
       </div>
@@ -985,7 +984,7 @@ coordSetBtn.addEventListener('click', async ()=>{
   }
 
   coordSetBtn.disabled = false;
-  coordSetBtn.textContent = 'SET COORDINATE';
+  coordSetBtn.textContent = 'SET';
 
   if(!geo){
     coordError.textContent = '該当場所無し。再入力して';
