@@ -661,12 +661,10 @@ ${recentLog || '（なし）'}
 
 上記アクションの結果を、TPU-01としての報告形式で述べよ。`;
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetch("https://nlab.mn/claud_api/proxy.php", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1000,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: contextMsg }]
     })
