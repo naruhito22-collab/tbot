@@ -836,6 +836,11 @@ coordSetBtn.addEventListener('click', async ()=>{
   document.getElementById('eraLabel').textContent = eraText;
   document.getElementById('placeLabel').textContent = placeStr;
   document.getElementById('fromLine').textContent = `FROM: TPU-01 / ${eraText}・${placeStr}`;
+
+  requestAndReceive(
+    "到着報告",
+    `${eraText}・${placeStr}に到着した。到着直後の周辺状況を短く報告せよ。`
+  );
 });
 
 // ---- tabs ----
