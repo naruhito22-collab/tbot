@@ -645,6 +645,11 @@ async function callTBotAPI(actionLabel, userCommand){
   const place = document.getElementById('placeLabel').textContent;
   const recentLog = missionLog.slice(-5).join('\n');
 
+  const isPhoto = actionLabel.startsWith('PHOTO');
+  const formatInstruction = isPhoto
+    ? `出力形式：まず現地の情景を表現した簡易的なアスキーアート（記号・罫線文字を使った十数行程度の絵）を出し、そのあとに1〜2行の短い状況報告を添えよ。アスキーアートは幅28文字程度に収めること。`
+    : `出力形式：3〜6行程度の短い報告文で述べよ。`;
+
   const contextMsg =
 `現在の座標：${era}／${place}
 これまでの交信ログ（直近）：
@@ -653,6 +658,7 @@ ${recentLog || '（なし）'}
 アクション種別：${actionLabel}
 指令内容：${userCommand}
 
+${formatInstruction}
 上記アクションの結果を、TPU-01としての報告形式で述べよ。`;
 
   const response = await fetch("https://nlab.mn/claud_api/proxy.php", {
