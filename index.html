@@ -153,8 +153,8 @@ html,body{
 .message-box{
   position:absolute;
   inset:18px;
-  display:flex;
-  align-items:center;
+  display:block;
+  overflow-y:auto;
   font-family:'Share Tech Mono',monospace;
   color:var(--phosphor);
   font-size:15px;
@@ -164,6 +164,9 @@ html,body{
   transition:opacity .6s ease;
   white-space:pre-wrap;
 }
+.message-box::-webkit-scrollbar{width:6px;}
+.message-box::-webkit-scrollbar-thumb{background:var(--phosphor-dim);border-radius:3px;}
+.message-box::-webkit-scrollbar-track{background:transparent;}
 .text-mode .message-box{opacity:1;}
 
 .status-tag{
@@ -450,7 +453,6 @@ html,body{
           <div class="from" id="fromLine">FROM: TPU-01 / 安政三年・品川宿</div>
           <div class="clocks">
             <span>NOW <b id="clockNow">--:--</b></span>
-            <span>DEST <b id="clockDest">--:--</b></span>
           </div>
         </div>
 
@@ -501,11 +503,6 @@ html,body{
       </div>
       <div class="dial-label">COORDINATE</div>
 
-      <div class="knob-row">
-        <div class="knob" title="SENS"></div>
-        <div class="knob" title="GAIN"></div>
-      </div>
-
       <div class="coord-input">
         <div class="field">
           <label>西暦</label>
@@ -529,9 +526,6 @@ function pad(n){return n.toString().padStart(2,'0');}
 function updateClocks(){
   const now = new Date();
   document.getElementById('clockNow').textContent = pad(now.getHours())+':'+pad(now.getMinutes());
-  // destination clock: cosmetic drift, era-flavored (not real conversion)
-  const destH = (now.getHours()+7)%24;
-  document.getElementById('clockDest').textContent = pad(destH)+':'+pad((now.getMinutes()+13)%60);
 }
 updateClocks();
 setInterval(updateClocks,1000);
