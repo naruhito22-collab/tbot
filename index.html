@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>T-BOT — Temporal Transceiver</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap');
+
+:root{
+  --chassis-dark:#111114;
+  --chassis-mid:#1c1c20;
+  --chassis-light:#2b2b30;
+  --chassis-edge:#3a3a42;
+  --screen-bg:#050805;
+  --phosphor:#ffb000;
+  --phosphor-dim:#7a5400;
+  --phosphor-glow:rgba(255,176,0,0.55);
+  --metal-text:#8a8a92;
+  --danger:#ff4d4d;
+}
+
+*{box-sizing:border-box;}
+html,body{
+  margin:0;
+  height:100%;
+  background:#000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-family:'Zen Kaku Gothic New',sans-serif;
+  overflow:hidden;
+}
+
+.unit{
+  position:relative;
+  width:960px;
+  max-width:96vw;
+  background:
+    radial-gradient(ellipse at 30% -10%, #3a3a42 0%, transparent 55%),
+    linear-gradient(180deg,var(--chassis-light) 0%, var(--chassis-mid) 12%, var(--chassis-dark) 100%);
+  border-radius:14px;
+  padding:22px 26px 26px;
+  box-shadow:
+    0 30px 70px rgba(0,0,0,0.7),
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    inset 0 -2px 4px rgba(0,0,0,0.6);
+  border:1px solid #050506;
+}
+
+/* brushed metal texture via repeating gradient */
+.unit::before{
+  content:"";
+  position:absolute;inset:0;
+  border-radius:14px;
+  background:repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 3px);
+  pointer-events:none;
+}
+
+.top-strip{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:0 4px 14px;
+  border-bottom:1px solid rgba(0,0,0,0.5);
+  margin-bottom:16px;
+}
+.brand{
+  font-family:'Share Tech Mono',monospace;
+  letter-spacing:4px;
+  font-size:13px;
+  color:#6d6d76;
+}
+.brand b{color:#c9c9d1;letter-spacing:2px;}
+.power-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--phosphor);
+  box-shadow:0 0 8px var(--phosphor-glow);
+  display:inline-block;
+  margin-right:8px;
+  animation:pulse-dot 3s ease-in-out infinite;
+}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.4}}
+
+.main-grid{
+  display:grid;
+  grid-template-columns:1fr 190px;
+  gap:22px;
+}
+
+/* ===== SCREEN ===== */
+.screen-wrap{
+  background:linear-gradient(180deg,#0d0d0f,#050505);
+  border-radius:8px;
+  padding:10px;
+  box-shadow:inset 0 3px 10px rgba(0,0,0,0.8), inset 0 0 0 1px #000;
+}
+
+.readout-line{
+  display:flex;
+  justify-content:space-between;
+  font-family:'Share Tech Mono',monospace;
+  font-size:11px;
+  color:var(--phosphor-dim);
+  padding:2px 6px 8px;
+  letter-spacing:1px;
+}
+.readout-line .from{color:var(--phosphor);text-shadow:0 0 6px var(--phosphor-glow);}
+.clocks{display:flex;gap:14px;}
+.clocks span b{color:var(--metal-text);font-weight:400;}
+
+.screen{
+  position:relative;
+  height:300px;
+  background:var(--screen-bg);
+  border-radius:4px;
+  overflow:hidden;
+  box-shadow:inset 0 0 40px rgba(0,0,0,0.9);
+}
+
+/* scanlines + CRT curvature vignette, kept subtle */
+.screen::after{
+  content:"";
+  position:absolute;inset:0;
+  background:repeating-linear-gradient(180deg, rgba(0,0,0,0.25) 0px, rgba(0,0,0,0.25) 1px, transparent 1px, transparent 3px);
+  mix-blend-mode:multiply;
+  pointer-events:none;
+}
+.screen::before{
+  content:"";
+  position:absolute;inset:0;
+  background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+  pointer-events:none;
+  z-index:5;
+}
+
+.screen-inner{
+  position:absolute;inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+}
+
+/* waveform */
+#wave{
+  width:100%;
+  height:130px;
+  display:block;
+}
+.wave-mode #wave{opacity:1;}
+.text-mode #wave{opacity:0;transition:opacity .5s ease;}
+
+.message-box{
+  position:absolute;
+  inset:18px;
+  display:flex;
+  align-items:center;
+  font-family:'Share Tech Mono',monospace;
+  color:var(--phosphor);
+  font-size:15px;
+  line-height:1.8;
+  text-shadow:0 0 6px var(--phosphor-glow);
+  opacity:0;
+  transition:opacity .6s ease;
+  white-space:pre-wrap;
+}
+.text-mode .message-box{opacity:1;}
+
+.status-tag{
+  position:absolute;
+  top:10px;left:14px;
+  font-family:'Share Tech Mono',monospace;
+  font-size:10px;
+  letter-spacing:2px;
+  color:var(--phosphor-dim);
+  z-index:6;
+}
+.status-tag.live{color:var(--danger);text-shadow:0 0 6px rgba(255,77,77,0.6);}
+
+/* bottom tab row */
+.tabs{
+  display:flex;
+  border-top:1px solid #000;
+  margin-top:8px;
+}
+.tabs button{
+  flex:1;
+  background:transparent;
+  border:none;
+  border-right:1px solid #000;
+  color:var(--metal-text);
+  font-family:'Share Tech Mono',monospace;
+  font-size:11px;
+  letter-spacing:1px;
+  padding:9px 0;
+  cursor:pointer;
+}
+.tabs button:last-child{border-right:none;}
+.tabs button.active{color:var(--phosphor);text-shadow:0 0 6px var(--phosphor-glow);}
+.tabs button:hover{color:#e0e0e0;}
+
+/* log panel (overlays screen-inner when active) */
+.log-panel{
+  position:absolute;inset:0;
+  padding:16px 18px;
+  font-family:'Share Tech Mono',monospace;
+  font-size:11.5px;
+  color:var(--phosphor-dim);
+  line-height:2;
+  overflow-y:auto;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .4s ease;
+  z-index:4;
+}
+.log-panel.active{opacity:1;pointer-events:auto;}
+.log-panel .entry b{color:var(--phosphor);}
+
+/* ===== RIGHT: DIAL COLUMN ===== */
+.dial-col{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:16px;
+  padding-top:4px;
+}
+.coord-window{
+  width:100%;
+  background:linear-gradient(180deg,#0d0d0f,#050505);
+  border-radius:4px;
+  padding:8px 10px;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,0.8);
+  font-family:'Share Tech Mono',monospace;
+  text-align:center;
+}
+.coord-window .era{
+  color:var(--phosphor);
+  font-size:13px;
+  text-shadow:0 0 6px var(--phosphor-glow);
+  letter-spacing:1px;
+}
+.coord-window .place{
+  color:var(--phosphor-dim);
+  font-size:10px;
+  margin-top:2px;
+  letter-spacing:1px;
+}
+
+.dial-outer{
+  width:150px;height:150px;
+  border-radius:50%;
+  background:
+    radial-gradient(circle at 35% 30%, #45454d 0%, #232328 45%, #101012 100%);
+  box-shadow:
+    0 8px 16px rgba(0,0,0,0.6),
+    inset 0 2px 3px rgba(255,255,255,0.15),
+    inset 0 -4px 8px rgba(0,0,0,0.7);
+  display:flex;align-items:center;justify-content:center;
+  cursor:grab;
+  position:relative;
+  user-select:none;
+}
+.dial-outer:active{cursor:grabbing;}
+.dial-inner{
+  width:96px;height:96px;
+  border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, #2c2c31, #08080a 80%);
+  box-shadow:inset 0 2px 4px rgba(255,255,255,0.08), inset 0 -3px 6px rgba(0,0,0,0.8);
+  position:relative;
+  transition:transform .15s ease-out;
+}
+.dial-inner::after{
+  content:"";
+  position:absolute;
+  top:6px;left:50%;
+  width:3px;height:16px;
+  background:var(--phosphor);
+  box-shadow:0 0 6px var(--phosphor-glow);
+  transform:translateX(-50%);
+  border-radius:2px;
+}
+.dial-ticks{
+  position:absolute;inset:0;
+  font-family:'Share Tech Mono',monospace;
+  font-size:8px;
+  color:#55555c;
+}
+.dial-label{
+  font-family:'Share Tech Mono',monospace;
+  font-size:9px;
+  letter-spacing:2px;
+  color:#55555c;
+}
+
+.knob-row{display:flex;gap:14px;margin-top:2px;}
+.knob{
+  width:34px;height:34px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#3c3c42,#141416 80%);
+  box-shadow:inset 0 1px 2px rgba(255,255,255,0.15), inset 0 -2px 4px rgba(0,0,0,0.7);
+  position:relative;
+}
+.knob::after{
+  content:"";
+  position:absolute;top:3px;left:50%;
+  width:2px;height:7px;background:#7a7a82;
+  transform:translateX(-50%);
+}
+
+/* ===== ACTION BUTTONS ===== */
+.action-row{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:10px;
+  margin-top:18px;
+}
+.action-btn{
+  background:linear-gradient(180deg,#28282d,#161619);
+  border:1px solid #000;
+  border-radius:6px;
+  color:var(--metal-text);
+  font-family:'Share Tech Mono',monospace;
+  font-size:11px;
+  letter-spacing:1px;
+  padding:12px 4px;
+  cursor:pointer;
+  box-shadow:0 2px 0 #000, inset 0 1px 0 rgba(255,255,255,0.06);
+  transition:all .12s ease;
+}
+.action-btn span{display:block;font-size:15px;margin-bottom:4px;}
+.action-btn:hover{color:var(--phosphor);border-color:#3a2c00;}
+.action-btn:active{
+  transform:translateY(2px);
+  box-shadow:0 0 0 #000, inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+/* command line */
+.cmd-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:14px;
+  background:#050505;
+  border-radius:6px;
+  padding:10px 12px;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,0.8);
+}
+.cmd-row .prompt{
+  font-family:'Share Tech Mono',monospace;
+  color:var(--phosphor);
+  font-size:13px;
+  text-shadow:0 0 6px var(--phosphor-glow);
+}
+.cmd-row input{
+  flex:1;
+  background:transparent;
+  border:none;
+  outline:none;
+  font-family:'Share Tech Mono',monospace;
+  color:var(--phosphor);
+  font-size:13px;
+  letter-spacing:.5px;
+}
+.cmd-row input::placeholder{color:var(--phosphor-dim);}
+.cmd-row .cursor-blink{
+  width:8px;height:14px;background:var(--phosphor);
+  box-shadow:0 0 6px var(--phosphor-glow);
+  animation:blink 1s step-end infinite;
+}
+@keyframes blink{50%{opacity:0;}}
+</style>
+</head>
+<body>
+
+<div class="unit">
+  <div class="top-strip">
+    <div class="brand"><span class="power-dot"></span><b>T-BOT</b> / TEMPORAL TRANSCEIVER MK.1</div>
+    <div class="brand">UNIT: TPU-01</div>
+  </div>
+
+  <div class="main-grid">
+    <!-- SCREEN COLUMN -->
+    <div>
+      <div class="screen-wrap">
+        <div class="readout-line">
+          <div class="from" id="fromLine">FROM: TPU-01 / 安政三年・品川宿</div>
+          <div class="clocks">
+            <span>NOW <b id="clockNow">--:--</b></span>
+            <span>DEST <b id="clockDest">--:--</b></span>
+          </div>
+        </div>
+
+        <div class="screen wave-mode" id="screen">
+          <div class="status-tag" id="statusTag">STANDBY</div>
+          <div class="screen-inner">
+            <canvas id="wave" width="700" height="260"></canvas>
+            <div class="message-box" id="messageBox"></div>
+          </div>
+          <div class="log-panel" id="logPanel">
+            <div class="entry"><b>LOG-001</b>　茶屋の老爺に接触。西暦1856年を確認。</div>
+            <div class="entry"><b>LOG-002</b>　薩摩藩の行列を確認。家臣に接触開始。</div>
+            <div class="entry"><b>LOG-003</b>　煙草を手土産に使用。懐柔成功。</div>
+            <div class="entry"><b>LOG-004</b>　江戸城へのルートを模索中。</div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <button class="active" data-tab="recv">RECEIVE</button>
+          <button data-tab="log">LOG</button>
+          <button data-tab="talk">TALK</button>
+        </div>
+      </div>
+
+      <div class="cmd-row">
+        <div class="prompt">&gt;</div>
+        <input id="cmdInput" placeholder="指令を入力…（例：徳川家康に会って）" />
+        <div class="cursor-blink"></div>
+      </div>
+
+      <div class="action-row">
+        <button class="action-btn" data-action="photo"><span>📷</span>PHOTO</button>
+        <button class="action-btn" data-action="search"><span>🔍</span>SEARCH</button>
+        <button class="action-btn" data-action="get"><span>💰</span>GET</button>
+        <button class="action-btn" data-action="talk"><span>💬</span>TALK</button>
+      </div>
+    </div>
+
+    <!-- DIAL COLUMN -->
+    <div class="dial-col">
+      <div class="coord-window">
+        <div class="era" id="eraLabel">安政三年</div>
+        <div class="place" id="placeLabel">京都府 / 品川宿</div>
+      </div>
+
+      <div class="dial-outer" id="dial">
+        <div class="dial-inner" id="dialInner"></div>
+      </div>
+      <div class="dial-label">COORDINATE</div>
+
+      <div class="knob-row">
+        <div class="knob" title="SENS"></div>
+        <div class="knob" title="GAIN"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- clocks ----
+function pad(n){return n.toString().padStart(2,'0');}
+function updateClocks(){
+  const now = new Date();
+  document.getElementById('clockNow').textContent = pad(now.getHours())+':'+pad(now.getMinutes());
+  // destination clock: cosmetic drift, era-flavored (not real conversion)
+  const destH = (now.getHours()+7)%24;
+  document.getElementById('clockDest').textContent = pad(destH)+':'+pad((now.getMinutes()+13)%60);
+}
+updateClocks();
+setInterval(updateClocks,1000);
+
+// ---- waveform (idle ripple / burst on receive) ----
+const canvas = document.getElementById('wave');
+const ctx = canvas.getContext('2d');
+let t = 0;
+let burst = 0; // 0..1 intensity envelope
+function drawWave(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle = '#ffb000';
+  ctx.shadowColor = 'rgba(255,176,0,0.6)';
+  ctx.shadowBlur = 8;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  const mid = canvas.height/2;
+  const amp = 10 + burst*70;
+  for(let x=0;x<=canvas.width;x+=4){
+    const n = Math.sin(x*0.03 + t) * Math.sin(x*0.008 + t*0.5);
+    const noise = burst>0.05 ? (Math.random()-0.5)*burst*40 : 0;
+    const y = mid + n*amp + noise;
+    if(x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  t += 0.06;
+  if(burst>0) burst = Math.max(0, burst - 0.012);
+  requestAnimationFrame(drawWave);
+}
+drawWave();
+
+// ---- dial rotation (drag) ----
+const dial = document.getElementById('dial');
+const dialInner = document.getElementById('dialInner');
+let angle = 0, dragging=false, lastX=0;
+dial.addEventListener('mousedown', e=>{dragging=true; lastX=e.clientX;});
+window.addEventListener('mouseup', ()=>dragging=false);
+window.addEventListener('mousemove', e=>{
+  if(!dragging) return;
+  const dx = e.clientX - lastX;
+  angle += dx*1.2;
+  lastX = e.clientX;
+  dialInner.style.transform = `rotate(${angle}deg)`;
+});
+
+const eras = [
+  ["安政三年","京都府 / 品川宿"],
+  ["天正十年","近江国 / 安土"],
+  ["大正十二年","東京府 / 神田"],
+  ["西暦2199年","軌道ステーション / 座標不明"],
+  ["古代ローマ","ラティウム / ローマ"]
+];
+let eraIdx = 0;
+dial.addEventListener('dblclick', ()=>{
+  eraIdx = (eraIdx+1)%eras.length;
+  document.getElementById('eraLabel').textContent = eras[eraIdx][0];
+  document.getElementById('placeLabel').textContent = eras[eraIdx][1];
+  document.getElementById('fromLine').textContent = `FROM: TPU-01 / ${eras[eraIdx][0]}・${eras[eraIdx][1].split(' / ')[1]}`;
+});
+
+// ---- receive sequence: burst -> clear -> reveal text ----
+const screen = document.getElementById('screen');
+const statusTag = document.getElementById('statusTag');
+const messageBox = document.getElementById('messageBox');
+
+function receive(text){
+  screen.classList.remove('text-mode');
+  screen.classList.add('wave-mode');
+  statusTag.textContent = 'RECEIVING…';
+  statusTag.classList.add('live');
+  burst = 1;
+  messageBox.textContent = '';
+
+  setTimeout(()=>{
+    statusTag.textContent = 'DECODED';
+    statusTag.classList.remove('live');
+    screen.classList.remove('wave-mode');
+    screen.classList.add('text-mode');
+    messageBox.textContent = text;
+  }, 1800);
+}
+
+// ---- action buttons ----
+const responses = {
+  photo: "［アスキーアート受信］\n現地の情景データを転送中……\n\n  古い茶屋の軒先。提灯が揺れている。",
+  search: "周辺を探索した。\n路地の奥に見慣れぬ紋の入った箱を発見。",
+  get: "商人から煙草入れを譲り受けた。\n次の接触の手土産に使えそうだ。",
+  talk: "近くにいた商人・佐吉に話しかけた。\n繋いでおく。応答を待て。"
+};
+document.querySelectorAll('.action-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    receive(responses[btn.dataset.action]);
+  });
+});
+
+// ---- command input ----
+const cmdInput = document.getElementById('cmdInput');
+cmdInput.addEventListener('keydown', e=>{
+  if(e.key==='Enter' && cmdInput.value.trim()){
+    const cmd = cmdInput.value.trim();
+    cmdInput.value='';
+    receive(`指令受領：「${cmd}」\n\n実行中……現地からの報告を待て。`);
+  }
+});
+
+// ---- tabs ----
+const logPanel = document.getElementById('logPanel');
+document.querySelectorAll('.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    if(btn.dataset.tab==='log'){
+      logPanel.classList.add('active');
+    } else {
+      logPanel.classList.remove('active');
+      if(btn.dataset.tab==='talk'){
+        cmdInput.placeholder = '会話を入力…（TALK中）';
+        cmdInput.focus();
+      } else {
+        cmdInput.placeholder = '指令を入力…（例：徳川家康に会って）';
+      }
+    }
+  });
+});
+</script>
+</body>
+</html>
