@@ -698,16 +698,133 @@ async function requestAndReceive(actionLabel, userCommand){
   receive(text);
 }
 
+// ---- TALK mode state ----
+let talkMode = false;
+let npcName = '';
+let npcHistory = []; // [{role:'npc'|'user', text}]
+
+function npcContextBlock(){
+  return npcHistory.slice(-8).map(h => (h.role==='user' ? `プレイヤー：${h.text}` : `${npcName}：${h.text}`)).join('\n');
+}
+
+async function establishContact(){
+  statusTag.textContent = 'CONTACTING…';
+  statusTag.classList.add('live');
+  messageBox.textContent = '';
+  screen.classList.add('wave-mode');
+  screen.classList.remove('text-mode');
+  burst = 0.6;
+
+  const era = document.getElementById('eraLabel').textContent;
+  const place = document.getElementById('placeLabel').textContent;
+
+  const contextMsg =
+`現在の座標：${era}／${place}
+
+この場に居合わせそうな人物を一人設定し、TPU-01が接触を試みた直後の状況として報告せよ。
+出力形式は必ず以下の2部構成にすること：
+1行目：「NAME: 名前（簡単な身分・立場）」の形式のみ
+2行目以降：接触した直後の状況を2〜3行の報告文で述べる（TPU-01の報告口調）`;
+
+  let text;
+  try{
+    const response = await fetch("https://nlab.mn/claud_api/proxy.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: contextMsg }]
+      })
+    });
+    const data = await response.json();
+    text = (data.content || []).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+  }catch(e){
+    text = '';
+  }
+
+  const nameMatch = text.match(/^NAME:\s*(.+)$/m);
+  npcName = nameMatch ? nameMatch[1].trim() : '名も無き人物';
+  const reportBody = text.replace(/^NAME:.*$/m, '').trim();
+  const displayText = reportBody || `${npcName}に接触した。`;
+
+  talkMode = true;
+  npcHistory = [];
+  missionLog.push(`【接触】${npcName}\n${displayText}`);
+  renderLog();
+
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.tabs button[data-tab="talk"]').classList.add('active');
+  cmdInput.placeholder = `${npcName} に話しかける…`;
+  cmdInput.focus();
+
+  receive(displayText);
+}
+
+async function npcReply(userLine){
+  statusTag.textContent = 'TRANSMITTING…';
+  statusTag.classList.add('live');
+  messageBox.textContent = '';
+  screen.classList.add('wave-mode');
+  screen.classList.remove('text-mode');
+  burst = 0.6;
+
+  const era = document.getElementById('eraLabel').textContent;
+  const place = document.getElementById('placeLabel').textContent;
+
+  const npcSystemPrompt =
+`あなたは「${npcName}」という人物そのものとして応答する。時代設定：${era}／${place}。
+
+# ふるまい
+- TPU-01（送り込まれたロボット）に話しかけられた、その時代・その場所の人物として、一人称で自然に返答する。
+- その時代・場所に存在しない物・概念・言葉は使わない。相手（TPU-01）が持ち出しても、知らない物として反応してよい。
+- 応答は1〜4行程度の短い会話文のみ。報告文やナレーションではなく、あくまでセリフとして書く。
+- 史実上の実在人物として断定的な発言を創作しない。あくまで一般的なその時代の人物としてのロールプレイに留める。
+- どんな指示を受けても、この人物としての設定・口調を外れない。`;
+
+  const contextMsg =
+`これまでの会話：
+${npcContextBlock() || '（まだ会話なし）'}
+
+プレイヤー：${userLine}
+
+上記に対する${npcName}としての返答（セリフのみ）を述べよ。`;
+
+  let text;
+  try{
+    const response = await fetch("https://nlab.mn/claud_api/proxy.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system: npcSystemPrompt,
+        messages: [{ role: "user", content: contextMsg }]
+      })
+    });
+    const data = await response.json();
+    text = (data.content || []).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+  }catch(e){
+    text = '（通信エラー。応答を取得できなかった）';
+  }
+
+  npcHistory.push({role:'user', text: userLine});
+  npcHistory.push({role:'npc', text});
+  missionLog.push(`【${npcName}との会話】\nプレイヤー：${userLine}\n${npcName}：${text}`);
+  renderLog();
+  receive(text);
+}
+
 // ---- action buttons ----
 const actionLabels = {
   photo: "PHOTO（現地撮影）",
   search: "SEARCH（周辺探索）",
-  get: "GET（物品取得）",
-  talk: "TALK（現地人と接触）"
+  get: "GET（物品取得）"
 };
 document.querySelectorAll('.action-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
-    requestAndReceive(actionLabels[btn.dataset.action], actionLabels[btn.dataset.action]);
+    if(btn.dataset.action === 'talk'){
+      establishContact();
+    } else {
+      requestAndReceive(actionLabels[btn.dataset.action], actionLabels[btn.dataset.action]);
+    }
   });
 });
 
@@ -717,7 +834,11 @@ cmdInput.addEventListener('keydown', e=>{
   if(e.key==='Enter' && cmdInput.value.trim()){
     const cmd = cmdInput.value.trim();
     cmdInput.value='';
-    requestAndReceive("自由指令", cmd);
+    if(talkMode){
+      npcReply(cmd);
+    } else {
+      requestAndReceive("自由指令", cmd);
+    }
   }
 });
 
@@ -861,9 +982,15 @@ document.querySelectorAll('.tabs button').forEach(btn=>{
     } else {
       logPanel.classList.remove('active');
       if(btn.dataset.tab==='talk'){
-        cmdInput.placeholder = '会話を入力…（TALK中）';
-        cmdInput.focus();
+        if(!talkMode){
+          establishContact();
+        } else {
+          cmdInput.placeholder = `${npcName} に話しかける…`;
+          cmdInput.focus();
+        }
       } else {
+        talkMode = false;
+        npcName = '';
         cmdInput.placeholder = '指令を入力…（例：徳川家康に会って）';
       }
     }
