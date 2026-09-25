@@ -644,6 +644,50 @@ const SYSTEM_PROMPT = `あなたはT-BOT「TPU-01」——過去・未来のあ�
 - 最後に一行、今後の行動方針や気になる兆候を添えてもよい。
 - 見出しやMarkdown装飾は使わない。`;
 
+// claude_API（Railway共通中継）経由でClaude APIを呼ぶ。2026-09-25にhetemlのproxy.phpから切り替え。
+const CLAUDE_API_URL = "https://claude-api-production-07fb.up.railway.app/api/claude";
+const CLAUDE_MODEL = "claude-sonnet-5"; // claude_API側のALLOWED_MODELSに含まれるモデルを明示指定
+const CLAUDE_MAX_TOKENS = 4000; // claude_API側のMAX_TOKENS_CAPと同じ上限
+
+async function callClaudeAPI(system, userContent){
+  let response;
+  try{
+    response = await fetch(CLAUDE_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: CLAUDE_MODEL,
+        max_tokens: CLAUDE_MAX_TOKENS,
+        system,
+        messages: [{ role: "user", content: userContent }]
+      })
+    });
+  }catch(e){
+    throw new Error('（通信不能。回線状況を確認されたし）');
+  }
+
+  if (!response.ok) {
+    if (response.status === 403) {
+      throw new Error('（通信拒否。許可されていない接続元と判定された）');
+    }
+    if (response.status === 429) {
+      throw new Error('（回線混雑。しばらく間を置いて再送信されたし）');
+    }
+    if (response.status === 400) {
+      throw new Error('（信号形式エラー。要指令内容の見直し）');
+    }
+    throw new Error(`（通信エラー。応答コード${response.status}）`);
+  }
+
+  const data = await response.json();
+  const text = (data.content || [])
+    .filter(b=>b.type==='text')
+    .map(b=>b.text)
+    .join('\n')
+    .trim();
+  return text || "（応答なし。電波状態不良の可能性）";
+}
+
 let missionLog = [];
 
 function renderLog(){
@@ -679,21 +723,7 @@ ${recentLog || '（なし）'}
 ${formatInstruction}
 上記アクションの結果を、TPU-01としての報告形式で述べよ。`;
 
-  const response = await fetch("https://nlab.mn/claud_api/proxy.php", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: contextMsg }]
-    })
-  });
-  const data = await response.json();
-  const text = (data.content || [])
-    .filter(b=>b.type==='text')
-    .map(b=>b.text)
-    .join('\n')
-    .trim();
-  return text || "（応答なし。電波状態不良の可能性）";
+  return callClaudeAPI(SYSTEM_PROMPT, contextMsg);
 }
 
 async function requestAndReceive(actionLabel, userCommand){
@@ -708,7 +738,7 @@ async function requestAndReceive(actionLabel, userCommand){
   try{
     text = await callTBotAPI(actionLabel, userCommand);
   }catch(e){
-    text = "（通信エラー。応答を取得できなかった）";
+    text = e.message || "（通信エラー。応答を取得できなかった）";
   }
   missionLog.push(text);
   renderLog();
@@ -762,18 +792,13 @@ async function establishContact(){
 
   let text;
   try{
-    const response = await fetch("https://nlab.mn/claud_api/proxy.php", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: contextMsg }]
-      })
-    });
-    const data = await response.json();
-    text = (data.content || []).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+    text = await callClaudeAPI(SYSTEM_PROMPT, contextMsg);
   }catch(e){
-    text = '';
+    const errorText = e.message || '（通信エラー。応答を取得できなかった）';
+    missionLog.push(`【接触失敗】${errorText}`);
+    renderLog();
+    receive(errorText);
+    return;
   }
 
   const nameMatch = text.match(/^NAME:\s*(.+)$/m);
@@ -830,23 +855,15 @@ ${npcContextBlock() || '（まだ会話なし）'}
 
   let text;
   try{
-    const response = await fetch("https://nlab.mn/claud_api/proxy.php", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system: npcSystemPrompt,
-        messages: [{ role: "user", content: contextMsg }]
-      })
-    });
-    const data = await response.json();
-    text = (data.content || []).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+    text = await callClaudeAPI(npcSystemPrompt, contextMsg);
+    npcHistory.push({role:'user', text: userLine});
+    npcHistory.push({role:'npc', text});
+    missionLog.push(`【${npcName}との会話】\nプレイヤー：${userLine}\n${npcName}：${text}`);
   }catch(e){
-    text = '（通信エラー。応答を取得できなかった）';
+    text = e.message || '（通信エラー。応答を取得できなかった）';
+    // 失敗時は会話履歴に混入させない（次のターンのコンテキストを汚さないため）
+    missionLog.push(`【${npcName}との通信エラー】\n${text}`);
   }
-
-  npcHistory.push({role:'user', text: userLine});
-  npcHistory.push({role:'npc', text});
-  missionLog.push(`【${npcName}との会話】\nプレイヤー：${userLine}\n${npcName}：${text}`);
   renderLog();
   receive(text);
 }
