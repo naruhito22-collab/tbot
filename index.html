@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>T-BOT — Temporal Transceiver</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap');
@@ -454,6 +455,32 @@ html,body{
 }
 .end-talk-btn.show{display:block;}
 .end-talk-btn:hover{color:#fff;border-color:#5a1a1a;}
+/* ===== MOBILE ===== */
+@media (max-width: 760px){
+  html,body{height:auto;min-height:100%;overflow:auto;align-items:flex-start;}
+  body{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px);}
+  .unit{width:100%;max-width:100%;border-radius:0;padding:14px 12px 20px;}
+  .brand{font-size:12px;}
+  .main-grid{grid-template-columns:1fr;gap:16px;}
+  .readout-line{font-size:13px;}
+  .screen{height:58vh;min-height:340px;}
+  .message-box{font-size:18px;line-height:1.75;inset:14px;}
+  .log-panel{font-size:15px;line-height:1.7;}
+  .status-tag{font-size:12px;}
+  .tabs button{font-size:14px;padding:12px 0;}
+  .cmd-row input{font-size:16px;}
+  .cmd-row .prompt{font-size:16px;}
+  .end-talk-btn{font-size:14px;}
+  .action-btn{font-size:13px;padding:12px 4px;}
+  .action-btn span{font-size:22px;}
+  .dial-col{align-items:center;}
+  .coord-window .era{font-size:20px;}
+  .coord-window .place{font-size:15px;}
+  .coord-input label{font-size:13px;}
+  .coord-input input{font-size:16px;}
+  .coord-set{font-size:14px;padding:10px;}
+  .coord-error,.coord-note{font-size:13px;}
+}
 </style>
 </head>
 <body>
